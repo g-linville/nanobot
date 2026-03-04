@@ -89,8 +89,8 @@ func (s *ToolsServer) deleteWorkflow(_ context.Context, data struct {
 		return nil, err
 	}
 
-	workflowPath := filepath.Join(".", workflowsDir, workflowName+".md")
-	if err := os.Remove(workflowPath); err != nil && !os.IsNotExist(err) {
+	workflowPath := filepath.Join(".", workflowsDir, workflowName)
+	if err := os.RemoveAll(workflowPath); err != nil {
 		return nil, fmt.Errorf("failed to delete workflow: %w", err)
 	}
 

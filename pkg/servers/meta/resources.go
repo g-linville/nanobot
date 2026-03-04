@@ -100,7 +100,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 		if workflowName == "" {
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow name is required")
 		}
-		workflowPath := filepath.Join(".", workflowsDir, workflowName+".md")
+		workflowPath := filepath.Join(".", workflowsDir, workflowName, "workflow.md")
 		if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
 		}
@@ -136,14 +136,16 @@ func (s *Server) listWorkflowResources(ctx context.Context) ([]mcp.Resource, err
 
 	var resources []mcp.Resource
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
+		if !entry.IsDir() {
 			continue
 		}
 
-		name := strings.TrimSuffix(entry.Name(), ".md")
+		name := entry.Name()
 
-		contentBytes, err := os.ReadFile(filepath.Join(workflowsPath, entry.Name()))
+		// Read the main workflow file from the subdirectory
+		contentBytes, err := os.ReadFile(filepath.Join(workflowsPath, name, "workflow.md"))
 		if err != nil {
+			// Skip directories without a workflow.md
 			continue
 		}
 
@@ -184,7 +186,7 @@ func (s *Server) readWorkflowResource(ctx context.Context, uri string) (*mcp.Rea
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow name is required")
 	}
 
-	workflowPath := filepath.Join(".", workflowsDir, workflowName+".md")
+	workflowPath := filepath.Join(".", workflowsDir, workflowName, "workflow.md")
 	contentBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", uri)
@@ -453,12 +455,12 @@ func (s *Server) ensureWatchers() error {
 
 		workflowFilter := func(relPath string, info os.FileInfo) bool {
 			if info.IsDir() {
-				return false
+				return true
 			}
 			return filepath.Ext(relPath) == ".md"
 		}
 
-		s.workflowWatcher = fswatch.NewWatcher(workflowsPath, 0, workflowFilter, s.handleWorkflowEvents)
+		s.workflowWatcher = fswatch.NewWatcher(workflowsPath, 1, workflowFilter, s.handleWorkflowEvents)
 		if err := s.workflowWatcher.Start(); err != nil {
 			s.watcherInitErr = fmt.Errorf("failed to start workflow watcher: %w", err)
 			return
@@ -494,7 +496,9 @@ func (s *Server) ensureWatchers() error {
 // handleWorkflowEvents processes filesystem events from the workflow watcher.
 func (s *Server) handleWorkflowEvents(events []fswatch.Event) {
 	for _, event := range events {
-		workflowName := strings.TrimSuffix(event.Path, ".md")
+		// Event paths are relative to the workflows dir, e.g. "code-review/workflow.md"
+		// Extract the workflow directory name (first path component)
+		workflowName := strings.SplitN(event.Path, string(filepath.Separator), 2)[0]
 		uri := fmt.Sprintf("workflow:///%s", workflowName)
 
 		switch event.Type {

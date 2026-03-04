@@ -5,7 +5,7 @@ description: Load this skill for ANY request that mentions workflows, including 
 
 # Workflows
 
-Workflows are Markdown files in `workflows/` that codify repeatable processes. Each step's output can be referenced by later steps using `{{Step Name}}`.
+Workflows are directories in `workflows/` that codify repeatable processes. Each workflow is a directory containing a `workflow.md` file (with YAML frontmatter) and any supporting files (scripts, assets, etc.). Each step's output can be referenced by later steps using `{{Step Name}}`.
 
 ## When to Use Workflows
 
@@ -22,8 +22,8 @@ Keep todo titles short and scannable. Update them as you progress — don't leav
 
 ## Workflow Format
 
-Workflows are Markdown files with:
-- **Frontmatter** (required): YAML frontmatter with `name` (human-friendly display name), `description`, and `createdAt` (ISO 8601 timestamp). The filename is the workflow identifier.
+Each workflow is a directory under `workflows/` containing a `workflow.md` file with:
+- **Frontmatter** (required): YAML frontmatter with `name` (human-friendly display name), `description`, and `createdAt` (ISO 8601 timestamp). The directory name is the workflow identifier.
 - **Inputs**: Optional parameters with defaults
 - **Steps**: Numbered steps with clear instructions
 - **Output**: Optional template for the final result
@@ -163,7 +163,7 @@ When asked to create a workflow, DO NOT start writing it immediately. Follow thi
 ### Phase 2: Draft & Save
 
 4. Once you understand the requirements, draft the workflow.
-5. Write it to `workflows/<name>.md`.
+5. Create the directory `workflows/<name>/` and write the workflow to `workflows/<name>/workflow.md`. Place any supporting files (scripts, data, etc.) alongside `workflow.md` in the same directory.
 6. Mark your design todos as complete.
 
 ### Phase 3: Hand Off
@@ -186,7 +186,7 @@ Users may ask to run a workflow at any time — not just immediately after desig
 
 When the user asks you to run a workflow:
 
-1. Load the workflow from `workflows/<name>.md`.
+1. Load the workflow from `workflows/<name>/workflow.md`.
 2. Use TodoWrite to create a todo for each workflow step before you begin. This is your execution plan — the user will follow along.
 3. **Present the execution plan to the user.** After creating the todos, present a brief summary of what will be executed and ask the user to confirm before proceeding. For example: "I've planned the following steps: [list steps]. Does this look good to proceed?"
 4. **Wait for user approval.** Do not begin execution until the user confirms.

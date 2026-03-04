@@ -39,18 +39,18 @@ func TestRecordWorkflowRun_DeduplicatesURI(t *testing.T) {
 	}
 }
 
-func TestDeleteWorkflow_RemovesFile(t *testing.T) {
+func TestDeleteWorkflow_RemovesDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 	restore := withWorkingDir(t, tempDir)
 	defer restore()
 
-	workflowsPath := filepath.Join(tempDir, workflowsDir)
-	if err := os.MkdirAll(workflowsPath, 0755); err != nil {
-		t.Fatalf("failed to create workflows directory: %v", err)
+	workflowDir := filepath.Join(tempDir, workflowsDir, "to-delete")
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		t.Fatalf("failed to create workflow directory: %v", err)
 	}
 
-	workflowPath := filepath.Join(workflowsPath, "to-delete.md")
-	if err := os.WriteFile(workflowPath, []byte("# test"), 0644); err != nil {
+	workflowFile := filepath.Join(workflowDir, "workflow.md")
+	if err := os.WriteFile(workflowFile, []byte("# test"), 0644); err != nil {
 		t.Fatalf("failed to write workflow file: %v", err)
 	}
 
@@ -61,7 +61,7 @@ func TestDeleteWorkflow_RemovesFile(t *testing.T) {
 		t.Fatalf("deleteWorkflow() failed: %v", err)
 	}
 
-	if _, err := os.Stat(workflowPath); !os.IsNotExist(err) {
-		t.Fatalf("expected workflow file to be deleted, stat err: %v", err)
+	if _, err := os.Stat(workflowDir); !os.IsNotExist(err) {
+		t.Fatalf("expected workflow directory to be deleted, stat err: %v", err)
 	}
 }

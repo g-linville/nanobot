@@ -150,22 +150,22 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 
 	var result []mcp.Resource
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
+		if !entry.IsDir() {
 			continue
 		}
 
-		name := strings.TrimSuffix(entry.Name(), ".md")
+		name := entry.Name()
 
-		// Read file to extract description and metadata
-		contentBytes, err := os.ReadFile(filepath.Join(workflowsPath, entry.Name()))
+		// Read the main workflow file from the subdirectory
+		contentBytes, err := os.ReadFile(filepath.Join(workflowsPath, name, "workflow.md"))
 		if err != nil {
-			// Skip files we can't read
+			// Skip directories without a workflow.md
 			continue
 		}
 
 		meta, err := parseWorkflowFrontmatter(string(contentBytes))
 		if err != nil {
-			log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", entry.Name(), err)
+			log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", name, err)
 		}
 
 		resourceMeta := make(map[string]any)
@@ -198,7 +198,7 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 		return nil, err
 	}
 
-	workflowPath := filepath.Join(".", workflowsDir, workflowName+".md")
+	workflowPath := filepath.Join(".", workflowsDir, workflowName, "workflow.md")
 	contentBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
@@ -240,7 +240,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 	}
 
 	// Verify the workflow file exists
-	workflowPath := filepath.Join(".", workflowsDir, workflowName+".md")
+	workflowPath := filepath.Join(".", workflowsDir, workflowName, "workflow.md")
 	if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
 	}
@@ -267,16 +267,16 @@ func (s *Server) ensureWatcher() error {
 			return
 		}
 
-		// Create a filter that only accepts .md files
+		// Create a filter that accepts directories and .md files inside subdirectories
 		filter := func(relPath string, info os.FileInfo) bool {
 			if info.IsDir() {
-				return true // Always allow directories
+				return true
 			}
 			return filepath.Ext(relPath) == ".md"
 		}
 
-		// Create watcher with depth 0 (only watch workflows directory, not subdirectories)
-		s.watcher = fswatch.NewWatcher(workflowsPath, 0, filter, s.handleFileEvents)
+		// Create watcher with depth 1 (watch workflow subdirectories)
+		s.watcher = fswatch.NewWatcher(workflowsPath, 1, filter, s.handleFileEvents)
 		if err := s.watcher.Start(); err != nil {
 			s.watcherInitErr = err
 			return
@@ -291,8 +291,9 @@ func (s *Server) ensureWatcher() error {
 // handleFileEvents processes filesystem events from the watcher
 func (s *Server) handleFileEvents(events []fswatch.Event) {
 	for _, event := range events {
-		// Convert filename to workflow URI
-		workflowName := strings.TrimSuffix(event.Path, ".md")
+		// Event paths are relative to the workflows dir, e.g. "code-review/workflow.md"
+		// Extract the workflow directory name (first path component)
+		workflowName := strings.SplitN(event.Path, string(filepath.Separator), 2)[0]
 		uri := fmt.Sprintf("workflow:///%s", workflowName)
 
 		switch event.Type {
