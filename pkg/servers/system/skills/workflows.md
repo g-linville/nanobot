@@ -247,3 +247,30 @@ Apply these changes? (yes/no/select specific)
 ```
 
 Don't change things that worked fine or add complexity without a concrete problem to solve.
+
+## Publishing & Sharing Workflows
+
+You can publish workflows to Obot's registry so other users can discover and install them.
+
+### Publishing
+
+To publish a workflow, use the `publishArtifact` tool:
+
+1. Ensure the workflow exists in `workflows/<name>/` with a `workflow.md` that has proper frontmatter (name, description).
+2. Call `publishArtifact` with the workflow directory name. For example: `publishArtifact({ "workflowName": "code-review" })`.
+3. The tool bundles all files in the directory, generates a manifest, and uploads to Obot.
+4. The first publish creates version 1. Subsequent publishes of the same workflow create new versions (v2, v3, etc.).
+5. Published workflows start as **private**. The user can change visibility to public in the Obot UI.
+
+### Searching
+
+To find published workflows from other users, use `searchArtifacts`:
+- Search by keyword: `searchArtifacts({ "query": "code review", "artifactType": "workflow" })`
+
+### Installing
+
+To install a published workflow, use `installArtifact`:
+- `installArtifact({ "id": "<artifact-id>" })` installs the latest version
+- `installArtifact({ "id": "<artifact-id>", "version": 2 })` installs a specific version
+- The workflow is automatically extracted into `workflows/<name>/` and is immediately available.
+- Installing overwrites any existing local workflow with the same name.
