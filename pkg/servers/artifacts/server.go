@@ -92,7 +92,6 @@ func getObotConfig(ctx context.Context) (obotConfig, error) {
 	}
 
 	var authHeader string
-	// TODO: does this key have the permissions we need?
 	if apiKey := envMap["MCP_API_KEY"]; apiKey != "" {
 		authHeader = "Bearer " + apiKey
 	}
