@@ -2,12 +2,15 @@ package workflows
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"mime"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/nanobot-ai/nanobot/pkg/fileuri"
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -155,9 +158,10 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 		}
 
 		name := entry.Name()
+		workflowDir := filepath.Join(workflowsPath, name)
 
 		// Read the main workflow file from the subdirectory
-		contentBytes, err := os.ReadFile(filepath.Join(workflowsPath, name, "workflow.md"))
+		contentBytes, err := os.ReadFile(filepath.Join(workflowDir, "workflow.md"))
 		if err != nil {
 			// Skip directories without a workflow.md
 			continue
@@ -187,12 +191,45 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 		}
 
 		result = append(result, res)
+
+		// List supporting files in the workflow directory
+		_ = filepath.WalkDir(workflowDir, func(path string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil || d.IsDir() {
+				return nil
+			}
+			if filepath.Base(path) == "workflow.md" {
+				return nil
+			}
+			relPath, err := filepath.Rel(".", path)
+			if err != nil {
+				return nil
+			}
+			info, err := d.Info()
+			if err != nil {
+				return nil
+			}
+			mimeType := mime.TypeByExtension(filepath.Ext(relPath))
+			if mimeType == "" {
+				mimeType = "application/octet-stream"
+			}
+			result = append(result, mcp.Resource{
+				URI:      fileuri.Encode(relPath),
+				Name:     filepath.Base(relPath),
+				MimeType: mimeType,
+				Size:     info.Size(),
+			})
+			return nil
+		})
 	}
 
 	return &mcp.ListResourcesResult{Resources: result}, nil
 }
 
 func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	if strings.HasPrefix(request.URI, "file:///") {
+		return s.readWorkflowFile(request.URI)
+	}
+
 	workflowName, err := parseWorkflowURI(request.URI)
 	if err != nil {
 		return nil, err
@@ -233,16 +270,85 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 	}, nil
 }
 
-func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, request mcp.SubscribeRequest) (*mcp.SubscribeResult, error) {
-	workflowName, err := parseWorkflowURI(request.URI)
+// readWorkflowFile reads a supporting file from a workflow directory.
+func (s *Server) readWorkflowFile(uri string) (*mcp.ReadResourceResult, error) {
+	relPath, err := fileuri.Decode(uri)
 	if err != nil {
-		return nil, err
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("%v", err)
 	}
 
-	// Verify the workflow file exists
-	workflowPath := filepath.Join(".", workflowsDir, workflowName, "workflow.md")
-	if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
-		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
+	cleanPath := filepath.Clean(relPath)
+
+	// Validate the path is under workflows/ and has no traversal
+	if !strings.HasPrefix(cleanPath, workflowsDir+string(filepath.Separator)) {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("file not in workflows directory: %s", uri)
+	}
+	for _, segment := range strings.Split(cleanPath, string(filepath.Separator)) {
+		if segment == ".." {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid file path: %s", uri)
+		}
+	}
+
+	contentBytes, err := os.ReadFile(filepath.Join(".", cleanPath))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("file not found: %s", uri)
+		}
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	mimeType := mime.TypeByExtension(filepath.Ext(relPath))
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	if i := strings.IndexByte(mimeType, ';'); i >= 0 {
+		mimeType = strings.TrimSpace(mimeType[:i])
+	}
+
+	rc := mcp.ResourceContent{
+		URI:      uri,
+		Name:     filepath.Base(relPath),
+		MIMEType: mimeType,
+	}
+
+	if _, isImage := types.ImageMimeTypes[mimeType]; isImage {
+		blob := base64.StdEncoding.EncodeToString(contentBytes)
+		rc.Blob = &blob
+	} else if _, isPDF := types.PDFMimeTypes[mimeType]; isPDF {
+		blob := base64.StdEncoding.EncodeToString(contentBytes)
+		rc.Blob = &blob
+	} else {
+		text := string(contentBytes)
+		rc.Text = &text
+	}
+
+	return &mcp.ReadResourceResult{
+		Contents: []mcp.ResourceContent{rc},
+	}, nil
+}
+
+func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, request mcp.SubscribeRequest) (*mcp.SubscribeResult, error) {
+	if strings.HasPrefix(request.URI, "file:///") {
+		relPath, err := fileuri.Decode(request.URI)
+		if err != nil {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("%v", err)
+		}
+		cleanPath := filepath.Clean(relPath)
+		if !strings.HasPrefix(cleanPath, workflowsDir+string(filepath.Separator)) {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("file not in workflows directory: %s", request.URI)
+		}
+		if _, err := os.Stat(filepath.Join(".", cleanPath)); os.IsNotExist(err) {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("file not found: %s", request.URI)
+		}
+	} else {
+		workflowName, err := parseWorkflowURI(request.URI)
+		if err != nil {
+			return nil, err
+		}
+		workflowPath := filepath.Join(".", workflowsDir, workflowName, "workflow.md")
+		if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
+		}
 	}
 
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
@@ -267,16 +373,8 @@ func (s *Server) ensureWatcher() error {
 			return
 		}
 
-		// Create a filter that accepts directories and .md files inside subdirectories
-		filter := func(relPath string, info os.FileInfo) bool {
-			if info.IsDir() {
-				return true
-			}
-			return filepath.Ext(relPath) == ".md"
-		}
-
-		// Create watcher with depth 1 (watch workflow subdirectories)
-		s.watcher = fswatch.NewWatcher(workflowsPath, 1, filter, s.handleFileEvents)
+		// Depth 3 to watch nested files like <workflow>/scripts/analyze.py
+		s.watcher = fswatch.NewWatcher(workflowsPath, 3, nil, s.handleFileEvents)
 		if err := s.watcher.Start(); err != nil {
 			s.watcherInitErr = err
 			return
@@ -292,24 +390,36 @@ func (s *Server) ensureWatcher() error {
 func (s *Server) handleFileEvents(events []fswatch.Event) {
 	for _, event := range events {
 		// Event paths are relative to the workflows dir, e.g. "code-review/workflow.md"
-		// Extract the workflow directory name (first path component)
-		workflowName := strings.SplitN(event.Path, string(filepath.Separator), 2)[0]
-		uri := fmt.Sprintf("workflow:///%s", workflowName)
+		// or "code-review/scripts/analyze.py"
+		parts := strings.SplitN(event.Path, string(filepath.Separator), 2)
+		workflowName := parts[0]
+		workflowURI := fmt.Sprintf("workflow:///%s", workflowName)
+
+		// Determine if this is the main workflow file or a supporting file
+		isMainFile := len(parts) == 2 && parts[1] == "workflow.md"
 
 		switch event.Type {
 		case fswatch.EventDelete:
-			// Send updated notification and list changed
-			s.subscriptions.SendResourceUpdatedNotification(uri)
-			s.subscriptions.AutoUnsubscribe(uri)
+			if isMainFile {
+				s.subscriptions.SendResourceUpdatedNotification(workflowURI)
+				s.subscriptions.AutoUnsubscribe(workflowURI)
+			} else if len(parts) == 2 {
+				fileURI := fileuri.Encode(filepath.Join(workflowsDir, event.Path))
+				s.subscriptions.SendResourceUpdatedNotification(fileURI)
+				s.subscriptions.AutoUnsubscribe(fileURI)
+			}
 			s.subscriptions.SendListChangedNotification()
 
 		case fswatch.EventCreate:
-			// New workflow created - send list changed
 			s.subscriptions.SendListChangedNotification()
 
 		case fswatch.EventWrite:
-			// Workflow modified - send updated notification
-			s.subscriptions.SendResourceUpdatedNotification(uri)
+			if isMainFile {
+				s.subscriptions.SendResourceUpdatedNotification(workflowURI)
+			} else if len(parts) == 2 {
+				fileURI := fileuri.Encode(filepath.Join(workflowsDir, event.Path))
+				s.subscriptions.SendResourceUpdatedNotification(fileURI)
+			}
 		}
 	}
 }
