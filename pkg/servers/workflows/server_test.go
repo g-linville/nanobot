@@ -88,8 +88,8 @@ func TestResourcesList(t *testing.T) {
 	if testWf.Meta == nil {
 		t.Fatal("test-workflow Meta should not be nil")
 	}
-	if testWf.Meta["name"] != "Test Workflow" {
-		t.Errorf("test-workflow Meta[name] = %q, want 'Test Workflow'", testWf.Meta["name"])
+	if testWf.Meta["name"] != "test-workflow" {
+		t.Errorf("test-workflow Meta[name] = %q, want 'test-workflow'", testWf.Meta["name"])
 	}
 	if testWf.Meta["createdAt"] != "2026-01-15T09:00:00Z" {
 		t.Errorf("test-workflow Meta[createdAt] = %q", testWf.Meta["createdAt"])
@@ -102,8 +102,8 @@ func TestResourcesList(t *testing.T) {
 	if anotherWf.Meta == nil {
 		t.Fatal("another Meta should not be nil")
 	}
-	if anotherWf.Meta["name"] != "Another Workflow" {
-		t.Errorf("another Meta[name] = %q, want 'Another Workflow'", anotherWf.Meta["name"])
+	if anotherWf.Meta["name"] != "another" {
+		t.Errorf("another Meta[name] = %q, want 'another'", anotherWf.Meta["name"])
 	}
 
 	// no-description should have empty description since it doesn't have "# Workflow:" header
@@ -182,7 +182,7 @@ func TestResourcesRead(t *testing.T) {
 			shouldContain: "## Inputs",
 			expectName:    "test-workflow",
 			expectMeta: map[string]string{
-				"name":      "Test Workflow",
+				"name":      "test-workflow",
 				"createdAt": "2026-01-15T09:00:00Z",
 			},
 		},
@@ -193,7 +193,7 @@ func TestResourcesRead(t *testing.T) {
 			shouldContain: "## Steps",
 			expectName:    "another",
 			expectMeta: map[string]string{
-				"name":      "Another Workflow",
+				"name":      "another",
 				"createdAt": "2026-01-16T10:30:00Z",
 			},
 		},
@@ -263,62 +263,3 @@ func TestResourcesRead(t *testing.T) {
 	}
 }
 
-func TestParseWorkflowFrontmatter(t *testing.T) {
-	tests := []struct {
-		name       string
-		content    string
-		expectMeta workflowMeta
-		expectErr  bool
-	}{
-		{
-			name:    "full frontmatter",
-			content: "---\nname: Code Review\ndescription: Review code.\ncreatedAt: 2026-01-15T09:00:00Z\n---\n\n## Steps\n\nBody here.",
-			expectMeta: workflowMeta{
-				Name:        "Code Review",
-				Description: "Review code.",
-				CreatedAt:   "2026-01-15T09:00:00Z",
-			},
-		},
-		{
-			name:       "no frontmatter",
-			content:    "# Workflow: test\n\nJust a body.",
-			expectMeta: workflowMeta{},
-		},
-		{
-			name:    "partial fields",
-			content: "---\nname: My Workflow\n---\n\n## Steps",
-			expectMeta: workflowMeta{
-				Name: "My Workflow",
-			},
-		},
-		{
-			name:       "malformed frontmatter - no closing delimiter",
-			content:    "---\nname: Broken\n# Workflow: test",
-			expectMeta: workflowMeta{},
-			expectErr:  true,
-		},
-		{
-			name:       "malformed frontmatter - invalid yaml",
-			content:    "---\n: :\n---\n\n# Workflow: test",
-			expectMeta: workflowMeta{},
-			expectErr:  true,
-		},
-		{
-			name:       "empty content",
-			content:    "",
-			expectMeta: workflowMeta{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			meta, err := parseWorkflowFrontmatter(tt.content)
-			if meta != tt.expectMeta {
-				t.Errorf("meta = %+v, want %+v", meta, tt.expectMeta)
-			}
-			if (err != nil) != tt.expectErr {
-				t.Errorf("err = %v, expectErr = %v", err, tt.expectErr)
-			}
-		})
-	}
-}

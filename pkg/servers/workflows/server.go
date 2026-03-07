@@ -17,47 +17,11 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
-	"gopkg.in/yaml.v3"
 )
 
 const (
 	workflowsDir = "workflows"
 )
-
-type workflowMeta struct {
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
-	CreatedAt   string `yaml:"createdAt"`
-}
-
-// parseWorkflowFrontmatter extracts YAML frontmatter from workflow content.
-// If no frontmatter is found (no opening ---), returns zero-value metadata with a nil error.
-func parseWorkflowFrontmatter(content string) (workflowMeta, error) {
-	lines := strings.Split(content, "\n")
-	if len(lines) < 3 || strings.TrimSpace(lines[0]) != "---" {
-		return workflowMeta{}, nil
-	}
-
-	endIdx := -1
-	for i := 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "---" {
-			endIdx = i
-			break
-		}
-	}
-
-	if endIdx == -1 {
-		return workflowMeta{}, fmt.Errorf("frontmatter missing closing delimiter")
-	}
-
-	frontmatterYAML := strings.Join(lines[1:endIdx], "\n")
-	var meta workflowMeta
-	if err := yaml.Unmarshal([]byte(frontmatterYAML), &meta); err != nil {
-		return workflowMeta{}, fmt.Errorf("failed to parse frontmatter: %w", err)
-	}
-
-	return meta, nil
-}
 
 type Server struct {
 	watcher        *fswatch.Watcher
@@ -168,23 +132,23 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 			continue
 		}
 
-		meta, err := parseWorkflowFrontmatter(string(contentBytes))
+		fm, _, err := skillformat.ParseFrontmatter(string(contentBytes))
 		if err != nil {
 			log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", name, err)
 		}
 
 		resourceMeta := make(map[string]any)
-		if meta.Name != "" {
-			resourceMeta["name"] = meta.Name
+		if fm.Name != "" {
+			resourceMeta["name"] = fm.Name
 		}
-		if meta.CreatedAt != "" {
-			resourceMeta["createdAt"] = meta.CreatedAt
+		if fm.Metadata["createdAt"] != "" {
+			resourceMeta["createdAt"] = fm.Metadata["createdAt"]
 		}
 
 		res := mcp.Resource{
 			URI:         fmt.Sprintf("workflow:///%s", name),
 			Name:        name,
-			Description: meta.Description,
+			Description: fm.Description,
 			MimeType:    "text/markdown",
 		}
 		if len(resourceMeta) > 0 {
@@ -243,17 +207,17 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 	}
 
 	content := string(contentBytes)
-	meta, err := parseWorkflowFrontmatter(content)
+	fm, _, err := skillformat.ParseFrontmatter(content)
 	if err != nil {
 		log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", workflowName, err)
 	}
 
 	resourceMeta := make(map[string]any)
-	if meta.Name != "" {
-		resourceMeta["name"] = meta.Name
+	if fm.Name != "" {
+		resourceMeta["name"] = fm.Name
 	}
-	if meta.CreatedAt != "" {
-		resourceMeta["createdAt"] = meta.CreatedAt
+	if fm.Metadata["createdAt"] != "" {
+		resourceMeta["createdAt"] = fm.Metadata["createdAt"]
 	}
 
 	rc := mcp.ResourceContent{
