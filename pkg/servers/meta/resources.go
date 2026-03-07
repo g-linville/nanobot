@@ -14,6 +14,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"gopkg.in/yaml.v3"
 )
@@ -100,7 +101,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 		if workflowName == "" {
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow name is required")
 		}
-		workflowPath := filepath.Join(".", workflowsDir, workflowName, "workflow.md")
+		workflowPath := filepath.Join(".", workflowsDir, workflowName, skillformat.SkillMainFile)
 		if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
 		}
@@ -156,7 +157,7 @@ func (s *Server) listWorkflowResources(ctx context.Context) ([]mcp.Resource, err
 		workflowDir := filepath.Join(workflowsPath, name)
 
 		// Read the main workflow file from the subdirectory
-		contentBytes, err := os.ReadFile(filepath.Join(workflowDir, "workflow.md"))
+		contentBytes, err := os.ReadFile(filepath.Join(workflowDir, skillformat.SkillMainFile))
 		if err != nil {
 			// Skip directories without a workflow.md
 			continue
@@ -192,7 +193,7 @@ func (s *Server) listWorkflowResources(ctx context.Context) ([]mcp.Resource, err
 			if walkErr != nil || d.IsDir() {
 				return nil
 			}
-			if filepath.Base(path) == "workflow.md" {
+			if filepath.Base(path) == skillformat.SkillMainFile {
 				return nil
 			}
 			relPath, err := filepath.Rel(".", path)
@@ -228,7 +229,7 @@ func (s *Server) readWorkflowResource(ctx context.Context, uri string) (*mcp.Rea
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow name is required")
 	}
 
-	workflowPath := filepath.Join(".", workflowsDir, workflowName, "workflow.md")
+	workflowPath := filepath.Join(".", workflowsDir, workflowName, skillformat.SkillMainFile)
 	contentBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", uri)
@@ -543,7 +544,7 @@ func (s *Server) handleWorkflowEvents(events []fswatch.Event) {
 		workflowName := parts[0]
 		workflowURI := fmt.Sprintf("workflow:///%s", workflowName)
 
-		isMainFile := len(parts) == 2 && parts[1] == "workflow.md"
+		isMainFile := len(parts) == 2 && parts[1] == skillformat.SkillMainFile
 
 		switch event.Type {
 		case fswatch.EventDelete:

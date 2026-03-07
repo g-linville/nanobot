@@ -10,10 +10,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
 
-	"gopkg.in/yaml.v3"
+	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 )
 
 const workflowsDir = "workflows"
@@ -29,24 +27,6 @@ type publishResult struct {
 	Message string `json:"message"`
 }
 
-type artifactManifest struct {
-	Name         string         `yaml:"name" json:"name"`
-	Description  string         `yaml:"description,omitempty" json:"description,omitempty"`
-	ArtifactType string         `yaml:"artifactType" json:"artifactType"`
-	CreatedAt    string         `yaml:"createdAt,omitempty" json:"createdAt,omitempty"`
-	Files        []manifestFile `yaml:"files" json:"files"`
-}
-
-type manifestFile struct {
-	Path string `yaml:"path" json:"path"`
-	Size int64  `yaml:"size" json:"size"`
-}
-
-type workflowFrontmatter struct {
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
-}
-
 func (s *Server) publishArtifact(ctx context.Context, params publishArtifactParams) (*publishResult, error) {
 	if params.WorkflowName == "" {
 		return nil, fmt.Errorf("workflowName is required")
@@ -58,14 +38,14 @@ func (s *Server) publishArtifact(ctx context.Context, params publishArtifactPara
 	}
 
 	workflowDir := filepath.Join(".", workflowsDir, params.WorkflowName)
-	mainFile := filepath.Join(workflowDir, "workflow.md")
+	mainFile := filepath.Join(workflowDir, skillformat.SkillMainFile)
 
 	content, err := os.ReadFile(mainFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read workflow file: %w", err)
+		return nil, fmt.Errorf("failed to read %s: %w", skillformat.SkillMainFile, err)
 	}
 
-	fm, err := parseFrontmatter(string(content))
+	fm, _, err := skillformat.ParseFrontmatter(string(content))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse frontmatter: %w", err)
 	}
@@ -75,37 +55,7 @@ func (s *Server) publishArtifact(ctx context.Context, params publishArtifactPara
 		name = params.WorkflowName
 	}
 
-	// Collect all files in the workflow directory.
-	var files []manifestFile
-	if err := filepath.Walk(workflowDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		relPath, err := filepath.Rel(workflowDir, path)
-		if err != nil {
-			return err
-		}
-		files = append(files, manifestFile{
-			Path: filepath.ToSlash(relPath),
-			Size: info.Size(),
-		})
-		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("failed to walk workflow directory: %w", err)
-	}
-
-	manifest := artifactManifest{
-		Name:         name,
-		Description:  fm.Description,
-		ArtifactType: "workflow",
-		CreatedAt:    time.Now().UTC().Format(time.RFC3339),
-		Files:        files,
-	}
-
-	zipData, err := createZIP(workflowDir, manifest)
+	zipData, err := createZIP(workflowDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ZIP: %w", err)
 	}
@@ -147,37 +97,39 @@ func (s *Server) publishArtifact(ctx context.Context, params publishArtifactPara
 	}, nil
 }
 
-func createZIP(workflowDir string, manifest artifactManifest) ([]byte, error) {
+// createZIP creates a ZIP archive containing all files in the workflow directory.
+// No manifest.yaml is generated — the SKILL.md frontmatter is the source of truth.
+func createZIP(workflowDir string) ([]byte, error) {
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 
-	manifestData, err := yaml.Marshal(manifest)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal manifest: %w", err)
-	}
-
-	fw, err := w.Create("manifest.yaml")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create manifest entry: %w", err)
-	}
-	if _, err := fw.Write(manifestData); err != nil {
-		return nil, fmt.Errorf("failed to write manifest: %w", err)
-	}
-
-	for _, f := range manifest.Files {
-		filePath := filepath.Join(workflowDir, filepath.FromSlash(f.Path))
-		data, err := os.ReadFile(filePath)
+	if err := filepath.Walk(workflowDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil, fmt.Errorf("failed to read %s: %w", f.Path, err)
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		relPath, err := filepath.Rel(workflowDir, path)
+		if err != nil {
+			return err
 		}
 
-		fw, err := w.Create(f.Path)
+		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create ZIP entry %s: %w", f.Path, err)
+			return fmt.Errorf("failed to read %s: %w", relPath, err)
+		}
+
+		fw, err := w.Create(filepath.ToSlash(relPath))
+		if err != nil {
+			return fmt.Errorf("failed to create ZIP entry %s: %w", relPath, err)
 		}
 		if _, err := fw.Write(data); err != nil {
-			return nil, fmt.Errorf("failed to write ZIP entry %s: %w", f.Path, err)
+			return fmt.Errorf("failed to write ZIP entry %s: %w", relPath, err)
 		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to walk workflow directory: %w", err)
 	}
 
 	if err := w.Close(); err != nil {
@@ -185,31 +137,4 @@ func createZIP(workflowDir string, manifest artifactManifest) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
-}
-
-func parseFrontmatter(content string) (workflowFrontmatter, error) {
-	lines := strings.Split(content, "\n")
-	if len(lines) < 3 || strings.TrimSpace(lines[0]) != "---" {
-		return workflowFrontmatter{}, nil
-	}
-
-	endIdx := -1
-	for i := 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "---" {
-			endIdx = i
-			break
-		}
-	}
-
-	if endIdx == -1 {
-		return workflowFrontmatter{}, fmt.Errorf("frontmatter missing closing delimiter")
-	}
-
-	fmYAML := strings.Join(lines[1:endIdx], "\n")
-	var fm workflowFrontmatter
-	if err := yaml.Unmarshal([]byte(fmYAML), &fm); err != nil {
-		return workflowFrontmatter{}, fmt.Errorf("failed to parse frontmatter: %w", err)
-	}
-
-	return fm, nil
 }

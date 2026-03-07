@@ -14,6 +14,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 	"gopkg.in/yaml.v3"
@@ -161,7 +162,7 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 		workflowDir := filepath.Join(workflowsPath, name)
 
 		// Read the main workflow file from the subdirectory
-		contentBytes, err := os.ReadFile(filepath.Join(workflowDir, "workflow.md"))
+		contentBytes, err := os.ReadFile(filepath.Join(workflowDir, skillformat.SkillMainFile))
 		if err != nil {
 			// Skip directories without a workflow.md
 			continue
@@ -197,7 +198,7 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 			if walkErr != nil || d.IsDir() {
 				return nil
 			}
-			if filepath.Base(path) == "workflow.md" {
+			if filepath.Base(path) == skillformat.SkillMainFile {
 				return nil
 			}
 			relPath, err := filepath.Rel(".", path)
@@ -235,7 +236,7 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 		return nil, err
 	}
 
-	workflowPath := filepath.Join(".", workflowsDir, workflowName, "workflow.md")
+	workflowPath := filepath.Join(".", workflowsDir, workflowName, skillformat.SkillMainFile)
 	contentBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
@@ -345,7 +346,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 		if err != nil {
 			return nil, err
 		}
-		workflowPath := filepath.Join(".", workflowsDir, workflowName, "workflow.md")
+		workflowPath := filepath.Join(".", workflowsDir, workflowName, skillformat.SkillMainFile)
 		if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
 		}
@@ -396,7 +397,7 @@ func (s *Server) handleFileEvents(events []fswatch.Event) {
 		workflowURI := fmt.Sprintf("workflow:///%s", workflowName)
 
 		// Determine if this is the main workflow file or a supporting file
-		isMainFile := len(parts) == 2 && parts[1] == "workflow.md"
+		isMainFile := len(parts) == 2 && parts[1] == skillformat.SkillMainFile
 
 		switch event.Type {
 		case fswatch.EventDelete:

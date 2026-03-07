@@ -3,12 +3,11 @@ package artifacts
 import (
 	"archive/zip"
 	"bytes"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"gopkg.in/yaml.v3"
+	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 )
 
 func withWorkingDir(t *testing.T, dir string) func() {
@@ -41,53 +40,18 @@ func createTestWorkflow(t *testing.T, baseDir, name string, files map[string]str
 	}
 }
 
-func TestParseFrontmatter(t *testing.T) {
-	content := "---\nname: Test Workflow\ndescription: A test workflow.\n---\n\n# Steps\n"
-	fm, err := parseFrontmatter(content)
-	if err != nil {
-		t.Fatalf("parseFrontmatter() error: %v", err)
-	}
-	if fm.Name != "Test Workflow" {
-		t.Errorf("name = %q, want %q", fm.Name, "Test Workflow")
-	}
-	if fm.Description != "A test workflow." {
-		t.Errorf("description = %q, want %q", fm.Description, "A test workflow.")
-	}
-}
-
-func TestParseFrontmatter_NoFrontmatter(t *testing.T) {
-	content := "# Just markdown\nNo frontmatter here."
-	fm, err := parseFrontmatter(content)
-	if err != nil {
-		t.Fatalf("parseFrontmatter() error: %v", err)
-	}
-	if fm.Name != "" || fm.Description != "" {
-		t.Errorf("expected empty frontmatter, got name=%q description=%q", fm.Name, fm.Description)
-	}
-}
-
 func TestCreateZIP(t *testing.T) {
 	tempDir := t.TempDir()
 	restore := withWorkingDir(t, tempDir)
 	defer restore()
 
 	createTestWorkflow(t, tempDir, "my-wf", map[string]string{
-		"workflow.md":        "---\nname: My WF\ndescription: desc\n---\n# Steps\n",
-		"scripts/analyze.py": "print('hello')\n",
+		skillformat.SkillMainFile: "---\nname: my-wf\ndescription: desc\n---\n# Steps\n",
+		"scripts/analyze.py":      "print('hello')\n",
 	})
 
 	workflowDir := filepath.Join(tempDir, workflowsDir, "my-wf")
-	manifest := artifactManifest{
-		Name:         "My WF",
-		Description:  "desc",
-		ArtifactType: "workflow",
-		Files: []manifestFile{
-			{Path: "workflow.md", Size: 46},
-			{Path: "scripts/analyze.py", Size: 16},
-		},
-	}
-
-	zipData, err := createZIP(workflowDir, manifest)
+	zipData, err := createZIP(workflowDir)
 	if err != nil {
 		t.Fatalf("createZIP() error: %v", err)
 	}
@@ -98,8 +62,7 @@ func TestCreateZIP(t *testing.T) {
 	}
 
 	expectedFiles := map[string]bool{
-		"manifest.yaml":      false,
-		"workflow.md":        false,
+		"SKILL.md":           false,
 		"scripts/analyze.py": false,
 	}
 
@@ -116,26 +79,10 @@ func TestCreateZIP(t *testing.T) {
 		}
 	}
 
-	// Verify manifest content.
+	// Verify no manifest.yaml in the ZIP
 	for _, f := range r.File {
 		if f.Name == "manifest.yaml" {
-			rc, _ := f.Open()
-			data, _ := io.ReadAll(rc)
-			rc.Close()
-
-			var m artifactManifest
-			if err := yaml.Unmarshal(data, &m); err != nil {
-				t.Fatalf("failed to parse manifest from ZIP: %v", err)
-			}
-			if m.Name != "My WF" {
-				t.Errorf("manifest name = %q, want %q", m.Name, "My WF")
-			}
-			if m.ArtifactType != "workflow" {
-				t.Errorf("manifest artifactType = %q, want %q", m.ArtifactType, "workflow")
-			}
-			if len(m.Files) != 2 {
-				t.Errorf("manifest files count = %d, want 2", len(m.Files))
-			}
+			t.Error("ZIP should not contain manifest.yaml")
 		}
 	}
 }

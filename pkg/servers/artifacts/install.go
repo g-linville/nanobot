@@ -18,6 +18,19 @@ import (
 
 const maxDownloadBytes = 100 * 1024 * 1024 // 100 MB
 
+type artifactManifest struct {
+	Name         string         `yaml:"name" json:"name"`
+	Description  string         `yaml:"description,omitempty" json:"description,omitempty"`
+	ArtifactType string         `yaml:"artifactType" json:"artifactType"`
+	CreatedAt    string         `yaml:"createdAt,omitempty" json:"createdAt,omitempty"`
+	Files        []manifestFile `yaml:"files" json:"files"`
+}
+
+type manifestFile struct {
+	Path string `yaml:"path" json:"path"`
+	Size int64  `yaml:"size" json:"size"`
+}
+
 type installArtifactParams struct {
 	ID      string `json:"id"`
 	Version *int   `json:"version,omitempty"`
