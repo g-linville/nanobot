@@ -53,9 +53,9 @@ func TestResourcesList(t *testing.T) {
 		t.Fatal("resourcesList() returned nil result")
 	}
 
-	// We should have 3 workflows in the test directory
-	if len(result.Resources) != 3 {
-		t.Errorf("expected 3 resources, got %d", len(result.Resources))
+	// We should have 3 workflows + 1 supporting file (from in-progress dir without SKILL.md)
+	if len(result.Resources) != 4 {
+		t.Errorf("expected 4 resources, got %d", len(result.Resources))
 	}
 
 	// Verify resources are present with correct names and URIs
@@ -260,5 +260,59 @@ func TestResourcesRead(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestResourcesListSupportingFilesWithoutSkillMD(t *testing.T) {
+	restore := withWorkingDir(t, testdataDir(t, "with-workflows"))
+	defer restore()
+
+	server := NewServer()
+	ctx := context.Background()
+
+	result, err := server.resourcesList(ctx, mcp.Message{}, mcp.ListResourcesRequest{})
+	if err != nil {
+		t.Fatalf("resourcesList() failed: %v", err)
+	}
+
+	// The in-progress directory has script.py but no SKILL.md.
+	// Supporting files should still be listed so clients can read them.
+	var found bool
+	for _, res := range result.Resources {
+		if res.Name == "script.py" && strings.Contains(res.URI, "in-progress") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected supporting file script.py from in-progress workflow (no SKILL.md) to be listed")
+	}
+
+	// The in-progress directory should NOT produce a workflow:/// resource
+	for _, res := range result.Resources {
+		if res.URI == "workflow:///in-progress" {
+			t.Error("should not list workflow:/// resource when SKILL.md is missing")
+		}
+	}
+}
+
+func TestResourcesReadSupportingFileWithoutSkillMD(t *testing.T) {
+	restore := withWorkingDir(t, testdataDir(t, "with-workflows"))
+	defer restore()
+
+	server := NewServer()
+	ctx := context.Background()
+
+	// Read the supporting file directly via file:/// URI
+	uri := "file:///workflows/in-progress/script.py"
+	result, err := server.resourcesRead(ctx, mcp.Message{}, mcp.ReadResourceRequest{URI: uri})
+	if err != nil {
+		t.Fatalf("resourcesRead() should succeed for supporting file without SKILL.md: %v", err)
+	}
+	if result == nil || len(result.Contents) == 0 {
+		t.Fatal("expected non-empty contents")
+	}
+	if result.Contents[0].Text == nil || *result.Contents[0].Text == "" {
+		t.Error("expected non-empty text content")
 	}
 }

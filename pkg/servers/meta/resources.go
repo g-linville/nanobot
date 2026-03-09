@@ -124,38 +124,35 @@ func (s *Server) listWorkflowResources(ctx context.Context) ([]mcp.Resource, err
 
 		// Read the main workflow file from the subdirectory
 		contentBytes, err := os.ReadFile(filepath.Join(workflowDir, skillformat.SkillMainFile))
-		if err != nil {
-			// Skip directories without a SKILL.md
-			continue
+		if err == nil {
+			fm, _, err := skillformat.ParseFrontmatter(string(contentBytes))
+			if err != nil {
+				log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", entry.Name(), err)
+			}
+
+			resourceMeta := make(map[string]any)
+			if fm.Name != "" {
+				resourceMeta["name"] = fm.Name
+				resourceMeta["displayName"] = skillformat.DisplayName(fm.Name)
+			}
+			if fm.Metadata["createdAt"] != "" {
+				resourceMeta["createdAt"] = fm.Metadata["createdAt"]
+			}
+
+			res := mcp.Resource{
+				URI:         fmt.Sprintf("workflow:///%s", name),
+				Name:        name,
+				Description: fm.Description,
+				MimeType:    "text/markdown",
+			}
+			if len(resourceMeta) > 0 {
+				res.Meta = resourceMeta
+			}
+
+			resources = append(resources, res)
 		}
 
-		fm, _, err := skillformat.ParseFrontmatter(string(contentBytes))
-		if err != nil {
-			log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", entry.Name(), err)
-		}
-
-		resourceMeta := make(map[string]any)
-		if fm.Name != "" {
-			resourceMeta["name"] = fm.Name
-			resourceMeta["displayName"] = skillformat.DisplayName(fm.Name)
-		}
-		if fm.Metadata["createdAt"] != "" {
-			resourceMeta["createdAt"] = fm.Metadata["createdAt"]
-		}
-
-		res := mcp.Resource{
-			URI:         fmt.Sprintf("workflow:///%s", name),
-			Name:        name,
-			Description: fm.Description,
-			MimeType:    "text/markdown",
-		}
-		if len(resourceMeta) > 0 {
-			res.Meta = resourceMeta
-		}
-
-		resources = append(resources, res)
-
-		// List supporting files in the workflow directory
+		// List supporting files in the workflow directory (even if SKILL.md doesn't exist yet)
 		_ = filepath.WalkDir(workflowDir, func(path string, d os.DirEntry, walkErr error) error {
 			if walkErr != nil || d.IsDir() {
 				return nil

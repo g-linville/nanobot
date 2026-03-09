@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"strconv"
 
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
 	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 )
 
@@ -90,6 +92,35 @@ func (s *Server) installArtifact(ctx context.Context, params installArtifactPara
 
 	// All artifacts are currently workflows.
 	targetDir := filepath.Join(".", workflowsDir, fm.Name)
+
+	// If the workflow already exists, ask the user for confirmation before overwriting.
+	if _, err := os.Stat(targetDir); err == nil {
+		session := mcp.SessionFromContext(ctx)
+		if session == nil {
+			return nil, fmt.Errorf("no session found in context")
+		}
+
+		elicit := mcp.ElicitRequest{
+			Message: fmt.Sprintf("A workflow named %q already exists. Do you want to overwrite it?", fm.Name),
+			RequestedSchema: mcp.PrimitiveSchema{
+				Type:       "object",
+				Properties: map[string]mcp.PrimitiveProperty{},
+			},
+		}
+
+		var result mcp.ElicitResult
+		if err := agent.ExchangeElicitation(ctx, session, elicit, &result); err != nil {
+			return nil, fmt.Errorf("failed to send overwrite confirmation: %w", err)
+		}
+
+		if result.Action != "accept" {
+			return &installResult{
+				Name:    fm.Name,
+				Path:    targetDir,
+				Message: fmt.Sprintf("Installation of %q was canceled by the user. The existing workflow was not modified.", fm.Name),
+			}, nil
+		}
+	}
 
 	// Remove existing directory to allow overwrite.
 	if err := os.RemoveAll(targetDir); err != nil {
