@@ -5,7 +5,7 @@ description: Load this skill for ANY request that mentions workflows, including 
 
 # Workflows
 
-Workflows are directories in `workflows/` that codify repeatable processes. Each workflow is a directory containing a `workflow.md` file (with YAML frontmatter) and any supporting files (scripts, assets, etc.). Each step's output can be referenced by later steps using `{{Step Name}}`.
+Workflows are directories in `workflows/` that codify repeatable processes. Each workflow is a directory containing a `SKILL.md` file (with YAML frontmatter) and any supporting files (scripts, assets, etc.). Each step's output can be referenced by later steps using `{{Step Name}}`.
 
 ## When to Use Workflows
 
@@ -22,21 +22,22 @@ Keep todo titles short and scannable. Update them as you progress — don't leav
 
 ## Workflow Format
 
-Each workflow is a directory under `workflows/` containing a `workflow.md` file with:
-- **Frontmatter** (required): YAML frontmatter with `name` (human-friendly display name), `description`, and `createdAt` (ISO 8601 timestamp). The directory name is the workflow identifier.
+Each workflow is a directory under `workflows/` containing a `SKILL.md` file with:
+- **Frontmatter** (required): YAML frontmatter with `name` (lowercase-hyphenated slug that must match the directory name), `description`, and optional `metadata` map.
 - **Inputs**: Optional parameters with defaults
 - **Steps**: Numbered steps with clear instructions
 - **Output**: Optional template for the final result
 
-When creating a new workflow, always include frontmatter with `name`, `description`, and `createdAt` set to the current date/time.
+When creating a new workflow, always include frontmatter with `name` (must match the directory name, lowercase with hyphens only) and `description`.
+
+**Name constraints:** lowercase letters, numbers, and hyphens only; no leading/trailing or consecutive hyphens; must match the directory name exactly.
 
 ### Example: Simple Review
 
 ```markdown
 ---
-name: Code Review
+name: code-review
 description: Review code changes for quality issues.
-createdAt: 2026-02-18T10:30:00Z
 ---
 
 ## Inputs
@@ -63,9 +64,8 @@ Focus on: error handling, edge cases, and readability.
 
 ```markdown
 ---
-name: Smart Fix
+name: smart-fix
 description: Analyze an issue and apply a fix only if it's safe to do so.
-createdAt: 2026-02-18T10:30:00Z
 ---
 
 ## Steps
@@ -95,9 +95,8 @@ Create a report explaining why manual intervention is needed:
 
 ```markdown
 ---
-name: Deploy with Rollback
+name: deploy-with-rollback
 description: Deploy changes with automatic rollback on failure.
-createdAt: 2026-02-18T10:30:00Z
 ---
 
 ## Inputs
@@ -163,7 +162,7 @@ When asked to create a workflow, DO NOT start writing it immediately. Follow thi
 ### Phase 2: Draft & Save
 
 4. Once you understand the requirements, draft the workflow.
-5. Create the directory `workflows/<name>/` and write the workflow to `workflows/<name>/workflow.md`. Place any supporting files (scripts, data, etc.) alongside `workflow.md` in the same directory.
+5. Create the directory `workflows/<name>/` and write the workflow to `workflows/<name>/SKILL.md`. Place any supporting files (scripts, data, etc.) alongside `SKILL.md` in the same directory.
 6. Mark your design todos as complete.
 
 ### Phase 3: Hand Off
@@ -186,7 +185,7 @@ Users may ask to run a workflow at any time — not just immediately after desig
 
 When the user asks you to run a workflow:
 
-1. Load the workflow from `workflows/<name>/workflow.md`.
+1. Load the workflow from `workflows/<name>/SKILL.md`.
 2. Use TodoWrite to create a todo for each workflow step before you begin. This is your execution plan — the user will follow along.
 3. **Present the execution plan to the user.** After creating the todos, present a brief summary of what will be executed and ask the user to confirm before proceeding. For example: "I've planned the following steps: [list steps]. Does this look good to proceed?"
 4. **Wait for user approval.** Do not begin execution until the user confirms.
@@ -256,9 +255,9 @@ You can publish workflows to Obot's registry so other users can discover and ins
 
 To publish a workflow, use the `publishArtifact` tool:
 
-1. Ensure the workflow exists in `workflows/<name>/` with a `workflow.md` that has proper frontmatter (name, description).
+1. Ensure the workflow exists in `workflows/<name>/` with a `SKILL.md` that has proper frontmatter (name, description). The workflow must pass format validation before publishing.
 2. Call `publishArtifact` with the workflow directory name. For example: `publishArtifact({ "workflowName": "code-review" })`.
-3. The tool bundles all files in the directory, generates a manifest, and uploads to Obot.
+3. The tool bundles all files in the directory and uploads to Obot. The `SKILL.md` frontmatter is the source of truth for artifact metadata.
 4. The first publish creates version 1. Subsequent publishes of the same workflow create new versions (v2, v3, etc.).
 5. Published workflows start as **private**. The user can change visibility to public in the Obot UI.
 
