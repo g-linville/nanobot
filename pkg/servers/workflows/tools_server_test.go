@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -49,7 +50,7 @@ func TestDeleteWorkflow_RemovesDirectory(t *testing.T) {
 		t.Fatalf("failed to create workflow directory: %v", err)
 	}
 
-	workflowFile := filepath.Join(workflowDir, "workflow.md")
+	workflowFile := filepath.Join(workflowDir, skillformat.SkillMainFile)
 	if err := os.WriteFile(workflowFile, []byte("# test"), 0644); err != nil {
 		t.Fatalf("failed to write workflow file: %v", err)
 	}
