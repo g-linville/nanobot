@@ -262,4 +262,3 @@ func TestResourcesRead(t *testing.T) {
 		})
 	}
 }
-
