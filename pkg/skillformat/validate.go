@@ -136,6 +136,21 @@ func ParseAndValidateFrontmatter(content string) (Frontmatter, string, error) {
 	return fm, body, nil
 }
 
+// FormatSkillMD serializes a Frontmatter and body back into a complete SKILL.md
+// string with YAML frontmatter delimiters.
+func FormatSkillMD(fm Frontmatter, body string) (string, error) {
+	fmData, err := yaml.Marshal(fm)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal frontmatter: %w", err)
+	}
+	var sb strings.Builder
+	sb.WriteString("---\n")
+	sb.Write(fmData)
+	sb.WriteString("---\n")
+	sb.WriteString(body)
+	return sb.String(), nil
+}
+
 // ValidateSkillDirectory validates a skill directory: checks that SKILL.md
 // exists, parses and validates its frontmatter, and ensures the frontmatter
 // name matches the directory name.

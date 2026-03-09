@@ -45,14 +45,13 @@ func (s *Server) publishArtifact(ctx context.Context, params publishArtifactPara
 		return nil, fmt.Errorf("failed to read %s: %w", skillformat.SkillMainFile, err)
 	}
 
-	fm, _, err := skillformat.ParseFrontmatter(string(content))
+	fm, _, err := skillformat.ParseAndValidateFrontmatter(string(content))
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse frontmatter: %w", err)
+		return nil, fmt.Errorf("invalid %s: %w", skillformat.SkillMainFile, err)
 	}
 
-	name := fm.Name
-	if name == "" {
-		name = params.WorkflowName
+	if err := skillformat.ValidateNameMatchesDir(fm.Name, filepath.Base(workflowDir)); err != nil {
+		return nil, err
 	}
 
 	zipData, err := createZIP(workflowDir)

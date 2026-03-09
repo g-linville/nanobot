@@ -305,6 +305,71 @@ func TestParseAndValidateFrontmatter(t *testing.T) {
 	}
 }
 
+func TestFormatSkillMD(t *testing.T) {
+	tests := []struct {
+		name string
+		fm   Frontmatter
+		body string
+	}{
+		{
+			name: "basic",
+			fm: Frontmatter{
+				Name:        "my-skill",
+				Description: "A test skill.",
+			},
+			body: "# Hello\nBody content.",
+		},
+		{
+			name: "with metadata",
+			fm: Frontmatter{
+				Name:        "my-skill",
+				Description: "A test skill.",
+				Metadata:    map[string]string{"author-email": "test@example.com"},
+			},
+			body: "# Hello",
+		},
+		{
+			name: "empty body",
+			fm: Frontmatter{
+				Name:        "my-skill",
+				Description: "A test skill.",
+			},
+			body: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := FormatSkillMD(tt.fm, tt.body)
+			if err != nil {
+				t.Fatalf("FormatSkillMD() error: %v", err)
+			}
+			if !strings.HasPrefix(result, "---\n") {
+				t.Error("result should start with ---")
+			}
+			// Round-trip: parse the result and verify it matches
+			gotFM, gotBody, err := ParseFrontmatter(result)
+			if err != nil {
+				t.Fatalf("round-trip ParseFrontmatter() error: %v", err)
+			}
+			if gotFM.Name != tt.fm.Name {
+				t.Errorf("round-trip Name = %q, want %q", gotFM.Name, tt.fm.Name)
+			}
+			if gotFM.Description != tt.fm.Description {
+				t.Errorf("round-trip Description = %q, want %q", gotFM.Description, tt.fm.Description)
+			}
+			if gotBody != tt.body {
+				t.Errorf("round-trip body = %q, want %q", gotBody, tt.body)
+			}
+			for k, v := range tt.fm.Metadata {
+				if gotFM.Metadata[k] != v {
+					t.Errorf("round-trip Metadata[%q] = %q, want %q", k, gotFM.Metadata[k], v)
+				}
+			}
+		})
+	}
+}
+
 func TestValidateSkillDirectory(t *testing.T) {
 	t.Run("valid directory", func(t *testing.T) {
 		dir := t.TempDir()

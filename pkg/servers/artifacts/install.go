@@ -13,23 +13,10 @@ import (
 	"runtime"
 	"strconv"
 
-	"gopkg.in/yaml.v3"
+	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 )
 
 const maxDownloadBytes = 100 * 1024 * 1024 // 100 MB
-
-type artifactManifest struct {
-	Name         string         `yaml:"name" json:"name"`
-	Description  string         `yaml:"description,omitempty" json:"description,omitempty"`
-	ArtifactType string         `yaml:"artifactType" json:"artifactType"`
-	CreatedAt    string         `yaml:"createdAt,omitempty" json:"createdAt,omitempty"`
-	Files        []manifestFile `yaml:"files" json:"files"`
-}
-
-type manifestFile struct {
-	Path string `yaml:"path" json:"path"`
-	Size int64  `yaml:"size" json:"size"`
-}
 
 type installArtifactParams struct {
 	ID      string `json:"id"`
@@ -92,25 +79,17 @@ func (s *Server) installArtifact(ctx context.Context, params installArtifactPara
 		return nil, fmt.Errorf("artifact exceeds maximum size of %d bytes", maxDownloadBytes)
 	}
 
-	manifest, err := readManifestFromZIP(zipData)
+	fm, err := readFrontmatterFromZIP(zipData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest from ZIP: %w", err)
+		return nil, fmt.Errorf("failed to read %s from ZIP: %w", skillformat.SkillMainFile, err)
 	}
 
-	if manifest.Name == "" {
-		return nil, fmt.Errorf("manifest name is empty")
-	}
-	if filepath.Base(manifest.Name) != manifest.Name || manifest.Name == "." || manifest.Name == ".." {
-		return nil, fmt.Errorf("invalid artifact name: %s", manifest.Name)
+	if filepath.Base(fm.Name) != fm.Name || fm.Name == "." || fm.Name == ".." {
+		return nil, fmt.Errorf("invalid artifact name: %s", fm.Name)
 	}
 
-	var targetDir string
-	switch manifest.ArtifactType {
-	case "workflow":
-		targetDir = filepath.Join(".", workflowsDir, manifest.Name)
-	default:
-		return nil, fmt.Errorf("unsupported artifact type: %s", manifest.ArtifactType)
-	}
+	// All artifacts are currently workflows.
+	targetDir := filepath.Join(".", workflowsDir, fm.Name)
 
 	// Remove existing directory to allow overwrite.
 	if err := os.RemoveAll(targetDir); err != nil {
@@ -123,45 +102,45 @@ func (s *Server) installArtifact(ctx context.Context, params installArtifactPara
 	}
 
 	return &installResult{
-		Name:           manifest.Name,
+		Name:           fm.Name,
 		Path:           targetDir,
 		InstalledFiles: installedFiles,
-		Message:        fmt.Sprintf("Installed %s into %s (%d files)", manifest.Name, targetDir, len(installedFiles)),
+		Message:        fmt.Sprintf("Installed %s into %s (%d files)", fm.Name, targetDir, len(installedFiles)),
 	}, nil
 }
 
-func readManifestFromZIP(data []byte) (artifactManifest, error) {
+func readFrontmatterFromZIP(data []byte) (skillformat.Frontmatter, error) {
 	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return artifactManifest{}, fmt.Errorf("invalid ZIP archive: %w", err)
+		return skillformat.Frontmatter{}, fmt.Errorf("invalid ZIP archive: %w", err)
 	}
 
 	for _, f := range r.File {
-		if f.Name == "manifest.yaml" {
+		if f.Name == skillformat.SkillMainFile {
 			rc, err := f.Open()
 			if err != nil {
-				return artifactManifest{}, fmt.Errorf("failed to open manifest: %w", err)
+				return skillformat.Frontmatter{}, fmt.Errorf("failed to open %s: %w", skillformat.SkillMainFile, err)
 			}
 			defer rc.Close()
 
-			manifestData, err := io.ReadAll(rc)
+			content, err := io.ReadAll(rc)
 			if err != nil {
-				return artifactManifest{}, fmt.Errorf("failed to read manifest: %w", err)
+				return skillformat.Frontmatter{}, fmt.Errorf("failed to read %s: %w", skillformat.SkillMainFile, err)
 			}
 
-			var manifest artifactManifest
-			if err := yaml.Unmarshal(manifestData, &manifest); err != nil {
-				return artifactManifest{}, fmt.Errorf("failed to parse manifest: %w", err)
+			fm, _, err := skillformat.ParseAndValidateFrontmatter(string(content))
+			if err != nil {
+				return skillformat.Frontmatter{}, fmt.Errorf("invalid %s: %w", skillformat.SkillMainFile, err)
 			}
-			return manifest, nil
+			return fm, nil
 		}
 	}
 
-	return artifactManifest{}, fmt.Errorf("manifest.yaml not found in ZIP")
+	return skillformat.Frontmatter{}, fmt.Errorf("%s not found in ZIP", skillformat.SkillMainFile)
 }
 
 // extractZIP writes the ZIP data to a temp file and uses the system `unzip`
-// command to extract it into targetDir (excluding manifest.yaml).
+// command to extract it into targetDir.
 func extractZIP(ctx context.Context, data []byte, targetDir string) ([]string, error) {
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create target directory: %w", err)
