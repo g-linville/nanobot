@@ -19,7 +19,7 @@ func NewServer() *Server {
 	s.tools = mcp.NewServerTools(
 		mcp.NewServerTool("publishArtifact",
 			"Publish a local workflow as a shareable artifact to the Obot registry. "+
-				"Reads the workflow directory, generates a manifest, creates a ZIP, and uploads it.",
+				"Reads the workflow directory, validates the SKILL.md, creates a ZIP, and uploads it.",
 			s.publishArtifact),
 		mcp.NewServerTool("searchArtifacts",
 			"Search the Obot registry for published artifacts (workflows) by keyword query.",

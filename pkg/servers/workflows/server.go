@@ -128,7 +128,7 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 		// Read the main workflow file from the subdirectory
 		contentBytes, err := os.ReadFile(filepath.Join(workflowDir, skillformat.SkillMainFile))
 		if err != nil {
-			// Skip directories without a workflow.md
+			// Skip directories without a SKILL.md
 			continue
 		}
 
@@ -354,7 +354,7 @@ func (s *Server) ensureWatcher() error {
 // handleFileEvents processes filesystem events from the watcher
 func (s *Server) handleFileEvents(events []fswatch.Event) {
 	for _, event := range events {
-		// Event paths are relative to the workflows dir, e.g. "code-review/workflow.md"
+		// Event paths are relative to the workflows dir, e.g. "code-review/SKILL.md"
 		// or "code-review/scripts/analyze.py"
 		parts := strings.SplitN(event.Path, string(filepath.Separator), 2)
 		workflowName := parts[0]
