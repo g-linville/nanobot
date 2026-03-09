@@ -137,6 +137,7 @@ func (s *Server) listWorkflowResources(ctx context.Context) ([]mcp.Resource, err
 		resourceMeta := make(map[string]any)
 		if fm.Name != "" {
 			resourceMeta["name"] = fm.Name
+			resourceMeta["displayName"] = skillformat.DisplayName(fm.Name)
 		}
 		if fm.Metadata["createdAt"] != "" {
 			resourceMeta["createdAt"] = fm.Metadata["createdAt"]
@@ -210,6 +211,7 @@ func (s *Server) readWorkflowResource(ctx context.Context, uri string) (*mcp.Rea
 	resourceMeta := make(map[string]any)
 	if fm.Name != "" {
 		resourceMeta["name"] = fm.Name
+		resourceMeta["displayName"] = skillformat.DisplayName(fm.Name)
 	}
 	if fm.Metadata["createdAt"] != "" {
 		resourceMeta["createdAt"] = fm.Metadata["createdAt"]

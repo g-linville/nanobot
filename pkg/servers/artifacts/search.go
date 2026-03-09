@@ -21,6 +21,7 @@ type searchResult struct {
 type searchResultItem struct {
 	ID            string `json:"id"`
 	Name          string `json:"name"`
+	DisplayName   string `json:"displayName,omitempty"`
 	Description   string `json:"description,omitempty"`
 	ArtifactType  string `json:"artifactType"`
 	AuthorEmail   string `json:"authorEmail,omitempty"`

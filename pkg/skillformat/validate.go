@@ -151,6 +151,21 @@ func FormatSkillMD(fm Frontmatter, body string) (string, error) {
 	return sb.String(), nil
 }
 
+// DisplayName converts a skill slug (e.g., "code-review") to a
+// human-readable display name (e.g., "Code Review").
+func DisplayName(slug string) string {
+	if slug == "" {
+		return ""
+	}
+	words := strings.Split(slug, "-")
+	for i, w := range words {
+		if len(w) > 0 {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	return strings.Join(words, " ")
+}
+
 // ValidateSkillDirectory validates a skill directory: checks that SKILL.md
 // exists, parses and validates its frontmatter, and ensures the frontmatter
 // name matches the directory name.

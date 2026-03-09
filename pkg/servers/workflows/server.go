@@ -140,6 +140,7 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 		resourceMeta := make(map[string]any)
 		if fm.Name != "" {
 			resourceMeta["name"] = fm.Name
+			resourceMeta["displayName"] = skillformat.DisplayName(fm.Name)
 		}
 		if fm.Metadata["createdAt"] != "" {
 			resourceMeta["createdAt"] = fm.Metadata["createdAt"]
@@ -215,6 +216,7 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 	resourceMeta := make(map[string]any)
 	if fm.Name != "" {
 		resourceMeta["name"] = fm.Name
+		resourceMeta["displayName"] = skillformat.DisplayName(fm.Name)
 	}
 	if fm.Metadata["createdAt"] != "" {
 		resourceMeta["createdAt"] = fm.Metadata["createdAt"]
