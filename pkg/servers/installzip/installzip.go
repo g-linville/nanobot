@@ -178,7 +178,7 @@ func open(data []byte) (*zip.Reader, error) {
 }
 
 func sanitizeArchivePath(name string) (string, error) {
-	name = strings.ReplaceAll(name, "\\", "/") // TODO(g-linville): can filepath.ToSlash be used instead?
+	name = normalizeArchiveSlashes(name)
 	cleaned := path.Clean(strings.TrimPrefix(name, "./"))
 	switch {
 	case cleaned == "":
@@ -190,10 +190,24 @@ func sanitizeArchivePath(name string) (string, error) {
 	case cleaned == ".." || strings.HasPrefix(cleaned, "../"):
 		return "", fmt.Errorf("path traversal is not allowed in ZIP contents: %s", name)
 	}
+	if len(cleaned) >= 2 && cleaned[1] == ':' &&
+		((cleaned[0] >= 'a' && cleaned[0] <= 'z') || (cleaned[0] >= 'A' && cleaned[0] <= 'Z')) {
+		return "", fmt.Errorf("absolute paths are not allowed in ZIP contents: %s", name)
+	}
+	if volume := filepath.VolumeName(filepath.FromSlash(cleaned)); volume != "" {
+		return "", fmt.Errorf("absolute paths are not allowed in ZIP contents: %s", name)
+	}
 	return cleaned, nil
 }
 
 func ensureWithinBase(baseDir, targetPath string) error {
+	if !filepath.IsAbs(baseDir) {
+		return fmt.Errorf("base extraction directory must be absolute: %s", baseDir)
+	}
+	if !filepath.IsAbs(targetPath) {
+		return fmt.Errorf("extracted path must be absolute: %s", targetPath)
+	}
+
 	rel, err := filepath.Rel(baseDir, targetPath)
 	if err != nil {
 		return fmt.Errorf("failed to resolve extracted path %s: %w", targetPath, err)
@@ -201,6 +215,10 @@ func ensureWithinBase(baseDir, targetPath string) error {
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("path traversal is not allowed in ZIP contents: %s", targetPath)
 	}
-	// TODO(g-linville): do we need to check for absolute paths here as well?
 	return nil
+}
+
+func normalizeArchiveSlashes(name string) string {
+	name = filepath.ToSlash(name)
+	return strings.ReplaceAll(name, "\\", "/")
 }
