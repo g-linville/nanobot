@@ -17,6 +17,7 @@ import (
 const (
 	MaxArchiveBytes      = 100 * 1024 * 1024
 	maxUncompressedBytes = 100 * 1024 * 1024
+	maxFileCount         = 100
 )
 
 func ReadAll(r io.Reader, label string) ([]byte, error) {
@@ -76,7 +77,6 @@ func ReadFrontmatter(data []byte) (skillformat.Frontmatter, error) {
 }
 
 func Extract(data []byte, targetDir string) ([]string, error) {
-	// TODO(g-linville): do a thorough security review
 	reader, err := open(data)
 	if err != nil {
 		return nil, err
@@ -91,10 +91,14 @@ func Extract(data []byte, targetDir string) ([]string, error) {
 		return nil, fmt.Errorf("failed to resolve target directory: %w", err)
 	}
 
+	if len(reader.File) > maxFileCount {
+		return nil, fmt.Errorf("archive contains %d entries, exceeding maximum of %d", len(reader.File), maxFileCount)
+	}
+
 	var (
-		installed         []string
-		foundSkillMain    bool
-		totalUncompressed uint64
+		installed      []string
+		foundSkillMain bool
+		totalWritten   uint64
 	)
 
 	for _, file := range reader.File {
@@ -104,11 +108,6 @@ func Extract(data []byte, targetDir string) ([]string, error) {
 		}
 		if name == "." {
 			continue
-		}
-
-		totalUncompressed += file.UncompressedSize64
-		if totalUncompressed > maxUncompressedBytes {
-			return nil, fmt.Errorf("archive exceeds maximum uncompressed size of %d bytes", maxUncompressedBytes)
 		}
 
 		if file.Mode()&os.ModeSymlink != 0 {
@@ -142,11 +141,16 @@ func Extract(data []byte, targetDir string) ([]string, error) {
 			return nil, fmt.Errorf("failed to create %s: %w", name, err)
 		}
 
-		_, copyErr := io.Copy(out, rc)
+		remaining := maxUncompressedBytes - totalWritten
+		written, copyErr := io.Copy(out, io.LimitReader(rc, int64(remaining)+1))
+		totalWritten += uint64(written)
 		closeOutErr := out.Close()
 		closeInErr := rc.Close()
 		if copyErr != nil {
 			return nil, fmt.Errorf("failed to extract %s: %w", name, copyErr)
+		}
+		if totalWritten > maxUncompressedBytes {
+			return nil, fmt.Errorf("archive exceeds maximum uncompressed size of %d bytes", maxUncompressedBytes)
 		}
 		if closeOutErr != nil {
 			return nil, fmt.Errorf("failed to close %s: %w", name, closeOutErr)
