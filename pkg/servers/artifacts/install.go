@@ -65,7 +65,7 @@ func (s *Server) installArtifact(ctx context.Context, params installArtifactPara
 		return nil, err
 	}
 
-	fm, err := readFrontmatterFromZIP(zipData)
+	fm, err := installzip.ReadFrontmatter(zipData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read %s from ZIP: %w", skillformat.SkillMainFile, err)
 	}
@@ -111,7 +111,7 @@ func (s *Server) installArtifact(ctx context.Context, params installArtifactPara
 		return nil, fmt.Errorf("failed to remove existing directory: %w", err)
 	}
 
-	installedFiles, err := extractZIP(ctx, zipData, targetDir)
+	installedFiles, err := installzip.Extract(zipData, targetDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract artifact: %w", err)
 	}
@@ -122,15 +122,4 @@ func (s *Server) installArtifact(ctx context.Context, params installArtifactPara
 		InstalledFiles: installedFiles,
 		Message:        fmt.Sprintf("Installed %s into %s (%d files)", fm.Name, targetDir, len(installedFiles)),
 	}, nil
-}
-
-// TODO(g-linville): remove this wrapper function and just use installzip.ReadFrontmatter directly
-func readFrontmatterFromZIP(data []byte) (skillformat.Frontmatter, error) {
-	return installzip.ReadFrontmatter(data)
-}
-
-// TODO(g-linville): remove this wrapper function and just use installzip.Extract directly
-func extractZIP(ctx context.Context, data []byte, targetDir string) ([]string, error) {
-	_ = ctx
-	return installzip.Extract(data, targetDir)
 }
